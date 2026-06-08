@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import os
 import shutil
 import tempfile
@@ -26,6 +28,9 @@ MAX_DURATION_SECONDS = int(os.environ.get("YTDLP_MAX_DURATION_SECONDS", "1800"))
 MAX_FILE_MB = int(os.environ.get("YTDLP_MAX_FILE_MB", "150"))
 MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("YTDLP_MAX_CONCURRENT_DOWNLOADS", "1"))
 APP_ACCESS_TOKEN = os.environ.get("APP_ACCESS_TOKEN")
+YTDLP_COOKIES_BASE64 = os.environ.get("YTDLP_COOKIES_BASE64")
+YTDLP_COOKIES_TEXT = os.environ.get("YTDLP_COOKIES_TEXT")
+YTDLP_COOKIES_PATH = os.environ.get("YTDLP_COOKIES_PATH")
 APP_CORS_ORIGINS = [
     origin.strip()
     for origin in os.environ.get("APP_CORS_ORIGINS", "").split(",")
@@ -65,6 +70,43 @@ def ffmpeg_available() -> bool:
     return bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 
 
+def cookies_file() -> Path | None:
+    if YTDLP_COOKIES_PATH:
+        path = Path(YTDLP_COOKIES_PATH)
+        return path if path.exists() else None
+
+    if not YTDLP_COOKIES_BASE64 and not YTDLP_COOKIES_TEXT:
+        return None
+
+    DOWNLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+    target = DOWNLOAD_ROOT / "cookies.txt"
+    if target.exists():
+        return target
+
+    try:
+        cookie_bytes = (
+            base64.b64decode(YTDLP_COOKIES_BASE64, validate=True)
+            if YTDLP_COOKIES_BASE64
+            else YTDLP_COOKIES_TEXT.encode("utf-8")
+        )
+    except (binascii.Error, UnicodeEncodeError) as exc:
+        raise RuntimeError("Invalid YTDLP_COOKIES_BASE64 or YTDLP_COOKIES_TEXT value.") from exc
+
+    target.write_bytes(cookie_bytes)
+    try:
+        target.chmod(0o600)
+    except OSError:
+        pass
+    return target
+
+
+def cookies_available() -> bool:
+    try:
+        return cookies_file() is not None
+    except RuntimeError:
+        return False
+
+
 def validate_youtube_url(url: str) -> str:
     parsed = urlparse(url.strip())
     host = (parsed.hostname or "").lower()
@@ -89,7 +131,7 @@ def duration_text(seconds: Any) -> str:
 
 
 def base_ydl_options() -> dict[str, Any]:
-    return {
+    options = {
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
@@ -101,6 +143,10 @@ def base_ydl_options() -> dict[str, Any]:
         "max_filesize": MAX_FILE_MB * 1024 * 1024,
         "cachedir": False,
     }
+    cookie_path = cookies_file()
+    if cookie_path:
+        options["cookiefile"] = str(cookie_path)
+    return options
 
 
 def extract_info(url: str) -> dict[str, Any]:
@@ -123,6 +169,7 @@ def extract_info(url: str) -> dict[str, Any]:
         "webpageUrl": info.get("webpage_url") or url,
         "uploader": info.get("uploader"),
         "ffmpegAvailable": ffmpeg_available(),
+        "cookiesAvailable": cookies_available(),
         "limits": {
             "maxDurationSeconds": MAX_DURATION_SECONDS,
             "maxFileMb": MAX_FILE_MB,
@@ -200,6 +247,7 @@ def api_config() -> dict[str, Any]:
     return {
         "requiresToken": bool(APP_ACCESS_TOKEN),
         "ffmpegAvailable": ffmpeg_available(),
+        "cookiesAvailable": cookies_available(),
         "maxDurationSeconds": MAX_DURATION_SECONDS,
         "maxFileMb": MAX_FILE_MB,
     }
@@ -210,6 +258,7 @@ def api_health() -> dict[str, Any]:
     return {
         "ok": True,
         "ffmpegAvailable": ffmpeg_available(),
+        "cookiesAvailable": cookies_available(),
         "time": int(time.time()),
     }
 

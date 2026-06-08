@@ -91,12 +91,53 @@ https://your-service.onrender.com
 
 打開後就可以貼 YouTube 網址解析與下載。
 
+## YouTube bot 驗證
+
+如果 Render 上出現這種錯誤：
+
+```text
+Sign in to confirm you’re not a bot
+```
+
+代表 YouTube 對 Render 的雲端 IP 觸發了 bot 驗證。解法是把你自己的 YouTube cookies 以 Render secret env 的方式提供給 yt-dlp。
+
+在本機 PowerShell 匯出 cookies：
+
+```powershell
+uvx yt-dlp --cookies-from-browser chrome --cookies cookies.txt --skip-download "https://www.youtube.com"
+```
+
+如果你用 Edge：
+
+```powershell
+uvx yt-dlp --cookies-from-browser edge --cookies cookies.txt --skip-download "https://www.youtube.com"
+```
+
+把 cookies 轉成 base64 並複製到剪貼簿：
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes(".\cookies.txt")) | Set-Clipboard
+```
+
+到 Render Dashboard 的服務頁面：
+
+1. 進入 `Environment`
+2. 新增 `YTDLP_COOKIES_BASE64`
+3. 貼上剛剛複製的內容
+4. 儲存後重新 Deploy
+5. 不要把 `cookies.txt` commit 到 GitHub
+
+cookies 會過期；如果之後又出現 bot 或登入錯誤，重新匯出一次並更新 Render env。
+
 ## 環境變數
 
 | 變數 | 預設值 | 說明 |
 | --- | --- | --- |
 | `APP_ACCESS_TOKEN` | 空 | 設定後，前端會要求輸入 token 才能解析與下載 |
 | `APP_CORS_ORIGINS` | 空 | 允許跨網域呼叫 API 的來源，多個用逗號分隔 |
+| `YTDLP_COOKIES_BASE64` | 空 | base64 後的 Netscape cookies.txt，用來處理 YouTube bot 驗證 |
+| `YTDLP_COOKIES_TEXT` | 空 | 原始 cookies.txt 內容，不建議優先使用，因為多行 env 容易格式錯 |
+| `YTDLP_COOKIES_PATH` | 空 | 容器內 cookies 檔案路徑 |
 | `YTDLP_DOWNLOAD_DIR` | 系統暫存資料夾 | 暫存下載檔案的位置 |
 | `YTDLP_MAX_DURATION_SECONDS` | `1800` | 影片最長秒數限制 |
 | `YTDLP_MAX_FILE_MB` | `150` | 最大檔案大小限制 |

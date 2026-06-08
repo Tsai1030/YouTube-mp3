@@ -34,6 +34,9 @@ Vercel is not recommended for the download backend because direct audio download
 | Name | Default | Purpose |
 | --- | --- | --- |
 | `APP_ACCESS_TOKEN` | empty | Optional token required by API calls when set |
+| `YTDLP_COOKIES_BASE64` | empty | Base64-encoded Netscape cookies.txt for YouTube bot checks |
+| `YTDLP_COOKIES_TEXT` | empty | Raw cookies.txt content; base64 is safer for multi-line Render env |
+| `YTDLP_COOKIES_PATH` | empty | Existing cookies file path inside the container |
 | `YTDLP_DOWNLOAD_DIR` | system temp | Temporary job output directory |
 | `YTDLP_MAX_DURATION_SECONDS` | `1800` | Reject videos longer than this |
 | `YTDLP_MAX_FILE_MB` | `150` | yt-dlp max file size limit |
