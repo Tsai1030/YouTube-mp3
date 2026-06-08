@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>YT Audio</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace" aria-labelledby="app-title">
+        <div class="mast">
+          <div>
+            <p class="eyebrow">yt-dlp web</p>
+            <h1 id="app-title">YT Audio</h1>
+          </div>
+          <div class="meter" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+
+        <form id="parse-form" class="panel">
+          <label for="url">YouTube URL</label>
+          <div class="url-row">
+            <input id="url" name="url" type="url" required autocomplete="off" placeholder="https://www.youtube.com/watch?v=...">
+            <button id="parse-button" type="submit">解析</button>
+          </div>
+          <div id="token-wrap" class="token-wrap" hidden>
+            <label for="token">Access token</label>
+            <input id="token" name="token" type="password" autocomplete="current-password">
+          </div>
+        </form>
+
+        <section id="result" class="result" hidden>
+          <img id="thumbnail" alt="">
+          <div class="details">
+            <p id="uploader" class="muted"></p>
+            <h2 id="title"></h2>
+            <p id="duration" class="muted"></p>
+            <div class="controls">
+              <label for="format">格式</label>
+              <select id="format">
+                <option value="mp3">MP3</option>
+                <option value="m4a">M4A</option>
+                <option value="best">原始音訊</option>
+              </select>
+              <button id="download-button" type="button">下載</button>
+            </div>
+          </div>
+        </section>
+
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

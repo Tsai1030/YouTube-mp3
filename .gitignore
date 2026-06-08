@@ -1,0 +1,36 @@
+# Local config
+.env
+.env.*
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Local downloads
+batch_urls.txt
+downloads/
+yt_dlp/
+*.part
+*.webm
+*.m4a
+*.mp3
+*.mp4
+*.wav
+
+# Build output
+build/
+dist/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
