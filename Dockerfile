@@ -14,7 +14,7 @@ WORKDIR /app
 
 # Node runtime + built POT provider server copied from the prebuilt image.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libstdc++6 ca-certificates \
+    && apt-get install -y --no-install-recommends libstdc++6 libatomic1 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=potprovider /usr/local/bin/node /usr/local/bin/node
 COPY --from=potprovider /app /opt/bgutil-provider
