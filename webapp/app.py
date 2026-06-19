@@ -31,6 +31,9 @@ MAX_DURATION_SECONDS = int(os.environ.get("YTDLP_MAX_DURATION_SECONDS", "1800"))
 MAX_FILE_MB = int(os.environ.get("YTDLP_MAX_FILE_MB", "150"))
 MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("YTDLP_MAX_CONCURRENT_DOWNLOADS", "1"))
 APP_ACCESS_TOKEN = os.environ.get("APP_ACCESS_TOKEN")
+# Admin-only token for /admin cookie refresh. Falls back to APP_ACCESS_TOKEN so the
+# public frontend can be left open (no APP_ACCESS_TOKEN) while /admin stays protected.
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN") or APP_ACCESS_TOKEN
 YTDLP_COOKIES_BASE64 = os.environ.get("YTDLP_COOKIES_BASE64")
 YTDLP_COOKIES_TEXT = os.environ.get("YTDLP_COOKIES_TEXT")
 YTDLP_COOKIES_PATH = os.environ.get("YTDLP_COOKIES_PATH")
@@ -200,9 +203,9 @@ def require_access_token(token: str | None) -> None:
 
 def require_admin(token: str | None) -> None:
     # Stricter than require_access_token: admin write endpoints must never be open.
-    if not APP_ACCESS_TOKEN:
-        raise HTTPException(status_code=403, detail="Admin disabled: set APP_ACCESS_TOKEN.")
-    if token != APP_ACCESS_TOKEN:
+    if not ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Admin disabled: set ADMIN_TOKEN.")
+    if token != ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail="Access token required.")
 
 

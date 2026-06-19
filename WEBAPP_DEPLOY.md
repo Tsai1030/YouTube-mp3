@@ -20,7 +20,7 @@ Render is the recommended target for this app. The included `render.yaml` uses D
 
 1. Push this repo to GitHub.
 2. In Render, create a Blueprint from the repo or create a Web Service with Docker runtime.
-3. Set `APP_ACCESS_TOKEN` as a secret value.
+3. For a public site, leave `APP_ACCESS_TOKEN` unset and set `ADMIN_TOKEN` (protects `/admin`).
 4. Deploy.
 
 The app binds to `0.0.0.0` and uses Render's `PORT` environment variable.
@@ -30,7 +30,7 @@ The app binds to `0.0.0.0` and uses Render's `PORT` environment variable.
 When YouTube returns "Sign in to confirm you're not a bot", refresh cookies from the
 token-protected admin page instead of editing Render env vars:
 
-1. `APP_ACCESS_TOKEN` **must** be set, otherwise the admin endpoints return 403.
+1. `ADMIN_TOKEN` **must** be set (falls back to `APP_ACCESS_TOKEN`), otherwise the admin endpoints return 403.
 2. Export `cookies.txt` locally (see the README) and open `https://<your-app>/admin/`.
 3. Enter the admin token, paste the `cookies.txt`, click **儲存並啟用**. It is validated
    immediately and takes effect on the next parse/download — no redeploy.
@@ -55,7 +55,8 @@ Vercel is not recommended for the download backend because direct audio download
 
 | Name | Default | Purpose |
 | --- | --- | --- |
-| `APP_ACCESS_TOKEN` | empty | Optional token for API calls; **required** to enable the `/admin/` cookie refresh |
+| `APP_ACCESS_TOKEN` | empty | Optional gate on the public frontend/API. Leave empty for a fully public site |
+| `ADMIN_TOKEN` | falls back to `APP_ACCESS_TOKEN` | Token protecting `/admin/` cookie refresh; set this to keep the frontend public but `/admin` locked |
 | `YTDLP_COOKIES_BASE64` | empty | Base64-encoded Netscape cookies.txt for YouTube bot checks |
 | `YTDLP_COOKIES_TEXT` | empty | Raw cookies.txt content; base64 is safer for multi-line Render env |
 | `YTDLP_COOKIES_PATH` | empty | Existing cookies file path inside the container |

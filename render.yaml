@@ -16,7 +16,11 @@ services:
         value: 150
       - key: YTDLP_MAX_CONCURRENT_DOWNLOADS
         value: 1
+      # Leave APP_ACCESS_TOKEN unset for a public frontend (anyone can download).
       - key: APP_ACCESS_TOKEN
+        sync: false
+      # Protects /admin cookie refresh independently of the public frontend.
+      - key: ADMIN_TOKEN
         sync: false
       # Upstash Redis (REST) — persists cookies across free-tier cold starts.
       - key: UPSTASH_REDIS_REST_URL
