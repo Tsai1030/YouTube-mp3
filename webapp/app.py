@@ -432,6 +432,48 @@ def api_health() -> dict[str, Any]:
     }
 
 
+@app.get("/api/diag")
+def api_diag() -> dict[str, Any]:
+    # Non-sensitive diagnostics only (no tokens, cookies, or URLs).
+    from urllib.error import HTTPError
+
+    pot_url = "http://127.0.0.1:4416"
+    pot_reachable = False
+    pot_detail: str | None = None
+    try:
+        with urlopen(pot_url + "/ping", timeout=5) as resp:
+            pot_reachable = True
+            pot_detail = resp.read(200).decode("utf-8", "replace")
+    except HTTPError:
+        pot_reachable = True  # server responded, just not on /ping
+    except Exception as exc:  # noqa: BLE001
+        pot_detail = str(exc)[:200]
+
+    try:
+        import importlib.metadata as md
+
+        plugin_version = md.version("bgutil-ytdlp-pot-provider")
+    except Exception:  # noqa: BLE001
+        plugin_version = None
+
+    try:
+        import yt_dlp.version as ydl_version
+
+        ytdlp_version = ydl_version.__version__
+    except Exception:  # noqa: BLE001
+        ytdlp_version = None
+
+    return {
+        "playerClient": YTDLP_PLAYER_CLIENT,
+        "ffmpegAvailable": ffmpeg_available(),
+        "cookiesAvailable": cookies_available(),
+        "upstashConfigured": upstash_configured(),
+        "potProvider": {"reachable": pot_reachable, "detail": pot_detail},
+        "potPluginVersion": plugin_version,
+        "ytdlpVersion": ytdlp_version,
+    }
+
+
 @app.post("/api/parse")
 async def api_parse(payload: UrlPayload, x_app_token: str | None = Header(default=None)) -> dict[str, Any]:
     require_access_token(x_app_token)
