@@ -532,6 +532,39 @@ def api_diag_extract() -> dict[str, Any]:
     return {"ok": ok, "error": error, "log": interesting[-60:]}
 
 
+@app.get("/api/diag/clients")
+def api_diag_clients() -> dict[str, Any]:
+    # Try each candidate player client (with POT) and report which works cookie-free.
+    candidates = [
+        "web", "mweb", "web_embedded", "web_safari", "web_creator",
+        "tv", "tv_embedded", "android", "android_vr", "ios",
+    ]
+    results: dict[str, str] = {}
+    for client in candidates:
+        options = {
+            **base_ydl_options(),
+            "skip_download": True,
+            "quiet": True,
+            "no_warnings": True,
+            "extractor_args": {"youtube": {"player_client": [client]}},
+        }
+        try:
+            with YoutubeDL(options) as ydl:
+                info = ydl.extract_info(ADMIN_COOKIE_PROBE_URL, download=False)
+            has_audio = any(
+                f.get("acodec") not in (None, "none")
+                for f in (info.get("formats") or [])
+            )
+            results[client] = f"OK title={info.get('title')!r} audio={has_audio}"
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc)
+            if "not a bot" in msg or "LOGIN_REQUIRED" in msg:
+                results[client] = "BLOCKED: login/bot"
+            else:
+                results[client] = "ERR: " + msg[:120]
+    return {"results": results}
+
+
 @app.post("/api/parse")
 async def api_parse(payload: UrlPayload, x_app_token: str | None = Header(default=None)) -> dict[str, Any]:
     require_access_token(x_app_token)
