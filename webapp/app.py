@@ -496,6 +496,42 @@ def api_diag() -> dict[str, Any]:
     }
 
 
+@app.get("/api/diag/extract")
+def api_diag_extract() -> dict[str, Any]:
+    # Verbose extraction on a fixed probe video to debug PO token usage.
+    class _Collector:
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+
+        def debug(self, msg: str) -> None:
+            self.lines.append(str(msg))
+
+        warning = debug
+        error = debug
+
+    logger = _Collector()
+    options = {
+        **base_ydl_options(),
+        "skip_download": True,
+        "verbose": True,
+        "logger": logger,
+    }
+    ok = False
+    error = None
+    try:
+        with YoutubeDL(options) as ydl:
+            ydl.extract_info(ADMIN_COOKIE_PROBE_URL, download=False)
+        ok = True
+    except Exception as exc:  # noqa: BLE001
+        error = str(exc)[:300]
+
+    interesting = [
+        ln for ln in logger.lines
+        if any(k in ln.lower() for k in ("pot", "gvs", "player", "client", "sign in", "bot", "token"))
+    ]
+    return {"ok": ok, "error": error, "log": interesting[-60:]}
+
+
 @app.post("/api/parse")
 async def api_parse(payload: UrlPayload, x_app_token: str | None = Header(default=None)) -> dict[str, Any]:
     require_access_token(x_app_token)
