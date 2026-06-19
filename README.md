@@ -99,7 +99,13 @@ https://your-service.onrender.com
 Sign in to confirm you’re not a bot
 ```
 
-代表 YouTube 對 Render 的雲端 IP 觸發了 bot 驗證。解法是把你自己的 YouTube cookies 以 Render secret env 的方式提供給 yt-dlp。
+代表 YouTube 對 Render 的雲端 IP 觸發了 bot 驗證。
+
+**第一招（免 cookies，預設已啟用）**：本專案預設用 `YTDLP_PLAYER_CLIENT=tv_embedded`
+這個 player client，多數情況下不需要 cookies 就能繞過 bot 驗證 —— 你和使用者都不用碰憑證。
+大部分影片這樣就能用了。
+
+**第二招（少數影片仍被擋時）**：才需要提供 cookies。以下兩種方式擇一。
 
 在本機 PowerShell 匯出 cookies：
 
@@ -127,17 +133,43 @@ uvx yt-dlp --cookies-from-browser edge --cookies cookies.txt --skip-download "ht
 4. 儲存後重新 Deploy
 5. 不要把 `cookies.txt` commit 到 GitHub
 
-cookies 會過期；如果之後又出現 bot 或登入錯誤，重新匯出一次並更新 Render env。
+## 用 /admin 直覺刷新 cookies（免重新部署）
+
+cookies 會過期。與其每次都進 Render Dashboard 改 env 再重新部署，可以用內建的管理員頁面：
+
+1. 先設好 `APP_ACCESS_TOKEN`（**必填**，否則管理端點會回 403 停用）。
+2. 本機匯出 `cookies.txt`（用上面的指令）。
+3. 打開 `https://<你的網址>/admin/`，輸入管理員 token，把 `cookies.txt` 全文貼進去，按
+   **儲存並啟用**。系統會立刻驗證並在「下一次解析/下載」生效，不需要重新部署。
+
+一般使用者完全不會碰到 cookies，照常貼網址下載即可。
+
+### 用 Upstash 讓 cookies 撐過 Render 休眠（免費）
+
+Render 免費版冷啟動會清空 `/tmp`，cookies 會遺失。設定 Upstash 後，開機會自動還原：
+
+1. 到 [upstash.com](https://upstash.com) 免費開一個 Redis 資料庫。
+2. 複製資料庫的 **REST URL** 與 **REST token**。
+3. 在 Render 設定 `UPSTASH_REDIS_REST_URL`、`UPSTASH_REDIS_REST_TOKEN`（secret）。
+4. 在 `/admin/` 刷新一次 cookies，之後每次開機都會自動還原，免重貼、免重新部署。
+
+別把 `cookies.txt` 或 Upstash 憑證 commit 到 GitHub。
 
 ## 環境變數
 
 | 變數 | 預設值 | 說明 |
 | --- | --- | --- |
-| `APP_ACCESS_TOKEN` | 空 | 設定後，前端會要求輸入 token 才能解析與下載 |
+| `APP_ACCESS_TOKEN` | 空 | 設定後，前端會要求輸入 token 才能解析與下載；也是啟用 `/admin/` cookies 刷新的必要條件 |
 | `APP_CORS_ORIGINS` | 空 | 允許跨網域呼叫 API 的來源，多個用逗號分隔 |
 | `YTDLP_COOKIES_BASE64` | 空 | base64 後的 Netscape cookies.txt，用來處理 YouTube bot 驗證 |
 | `YTDLP_COOKIES_TEXT` | 空 | 原始 cookies.txt 內容，不建議優先使用，因為多行 env 容易格式錯 |
 | `YTDLP_COOKIES_PATH` | 空 | 容器內 cookies 檔案路徑 |
+| `UPSTASH_REDIS_REST_URL` | 空 | Upstash Redis REST URL，用來持久化 cookies、撐過冷啟動 |
+| `UPSTASH_REDIS_REST_TOKEN` | 空 | Upstash Redis REST token |
+| `COOKIE_KV_KEY` | `ytdlp:cookies` | 存 cookies 用的 Redis key |
+| `ADMIN_COOKIE_PROBE_URL` | 一支已知影片 | 管理頁「驗證」時用來測試的網址 |
+| `YTDLP_PROXY` | 空 | 可選的 yt-dlp proxy（例如住宅代理），從根本避開資料中心 IP 的 bot 驗證 |
+| `YTDLP_PLAYER_CLIENT` | `tv_embedded` | YouTube player client，逗號分隔。預設 `tv_embedded` 可不靠 cookies 繞過 bot 驗證；留空則用 yt-dlp 預設 |
 | `YTDLP_DOWNLOAD_DIR` | 系統暫存資料夾 | 暫存下載檔案的位置 |
 | `YTDLP_MAX_DURATION_SECONDS` | `1800` | 影片最長秒數限制 |
 | `YTDLP_MAX_FILE_MB` | `150` | 最大檔案大小限制 |

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cookies 管理 · YT Audio</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace" aria-labelledby="app-title">
+        <div class="mast">
+          <div>
+            <p class="eyebrow">admin · cookies</p>
+            <h1 id="app-title">Cookies</h1>
+          </div>
+          <a class="back-link" href="/">← 回下載頁</a>
+        </div>
+
+        <section class="panel" aria-label="目前狀態">
+          <h2 class="card-title">目前狀態</h2>
+          <dl id="status-grid" class="status-grid">
+            <div><dt>已載入</dt><dd id="st-loaded">—</dd></div>
+            <div><dt>來源</dt><dd id="st-source">—</dd></div>
+            <div><dt>大小</dt><dd id="st-size">—</dd></div>
+            <div><dt>更新時間</dt><dd id="st-updated">—</dd></div>
+            <div><dt>持久化</dt><dd id="st-persist">—</dd></div>
+            <div><dt>最近驗證</dt><dd id="st-validation">—</dd></div>
+          </dl>
+        </section>
+
+        <form id="cookie-form" class="panel">
+          <label for="admin-token">管理員 token（APP_ACCESS_TOKEN）</label>
+          <input id="admin-token" type="password" autocomplete="current-password" placeholder="輸入後才能讀取狀態與儲存">
+
+          <label for="cookies">cookies.txt 內容（Netscape 格式）</label>
+          <textarea id="cookies" rows="10" spellcheck="false" autocomplete="off"
+            placeholder="# Netscape HTTP Cookie File&#10;.youtube.com	TRUE	/	TRUE	...	SID	...&#10;貼上你本機匯出的 cookies.txt 全文"></textarea>
+
+          <label class="checkbox-row">
+            <input id="is-base64" type="checkbox">
+            <span>上面貼的是 base64（而非原始 cookies.txt）</span>
+          </label>
+
+          <div class="button-row">
+            <button id="save-button" type="submit">儲存並啟用</button>
+            <button id="validate-button" type="button" class="secondary">只驗證目前 cookies</button>
+            <button id="refresh-status" type="button" class="secondary">重新整理狀態</button>
+          </div>
+        </form>
+
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script src="/admin/admin.js" defer></script>
+  </body>
+</html>

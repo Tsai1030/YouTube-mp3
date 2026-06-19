@@ -131,7 +131,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 48px;
   border: 1px solid var(--line);
@@ -143,10 +144,96 @@ select {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
+textarea {
+  padding: 12px 14px;
+  resize: vertical;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(11, 122, 117, 0.14);
+}
+
+.panel + .panel {
+  margin-top: 18px;
+}
+
+.card-title {
+  margin: 0 0 14px;
+  font-size: 1.15rem;
+}
+
+.back-link {
+  color: var(--accent-dark);
+  font-weight: 700;
+  text-decoration: none;
+  align-self: center;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px 24px;
+  margin: 0;
+}
+
+.status-grid dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.status-grid dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.checkbox-row input {
+  width: auto;
+  min-height: 0;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--accent-dark);
+  border: 1px solid var(--line);
+}
+
+button.secondary:hover {
+  background: rgba(11, 122, 117, 0.08);
+}
+
+#cookie-form label:not(.checkbox-row) {
+  margin-top: 16px;
+}
+
+#cookie-form > label:first-of-type {
+  margin-top: 0;
 }
 
 button {

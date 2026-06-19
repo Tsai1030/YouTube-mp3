@@ -3,13 +3,16 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import json
 import os
 import shutil
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
+from urllib.request import Request as UrlRequest, urlopen
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,11 +34,30 @@ APP_ACCESS_TOKEN = os.environ.get("APP_ACCESS_TOKEN")
 YTDLP_COOKIES_BASE64 = os.environ.get("YTDLP_COOKIES_BASE64")
 YTDLP_COOKIES_TEXT = os.environ.get("YTDLP_COOKIES_TEXT")
 YTDLP_COOKIES_PATH = os.environ.get("YTDLP_COOKIES_PATH")
+YTDLP_PROXY = os.environ.get("YTDLP_PROXY")
+# YouTube "player client(s)" to use. tv_embedded bypasses the datacenter-IP bot check
+# without cookies. Comma-separated; empty string falls back to yt-dlp defaults.
+YTDLP_PLAYER_CLIENT = os.environ.get("YTDLP_PLAYER_CLIENT", "tv_embedded")
 APP_CORS_ORIGINS = [
     origin.strip()
     for origin in os.environ.get("APP_CORS_ORIGINS", "").split(",")
     if origin.strip()
 ]
+
+# Upstash Redis (REST) — optional persistence so cookies survive Render cold starts.
+UPSTASH_REDIS_REST_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
+UPSTASH_REDIS_REST_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+COOKIE_KV_KEY = os.environ.get("COOKIE_KV_KEY", "ytdlp:cookies")
+ADMIN_COOKIE_PROBE_URL = os.environ.get(
+    "ADMIN_COOKIE_PROBE_URL", "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+)
+
+# Mutable cookie state: an admin refresh (or KV restore) points this at the live file,
+# so the next parse/download picks it up without a redeploy. cookies_file() prefers it.
+_COOKIE_LOCK = threading.Lock()
+_RUNTIME_COOKIE_PATH: Path | None = None
+COOKIES_FILE = DOWNLOAD_ROOT / "cookies.txt"
+_LAST_VALIDATION: dict[str, Any] = {}  # never holds cookie content
 
 YOUTUBE_HOSTS = {
     "youtube.com",
@@ -66,11 +88,68 @@ class DownloadPayload(UrlPayload):
     audio_format: Literal["best", "mp3", "m4a"] = "mp3"
 
 
+class CookieRefreshPayload(BaseModel):
+    cookies_text: str | None = Field(default=None, max_length=262144)
+    cookies_base64: str | None = Field(default=None, max_length=349536)
+    run_validation: bool = Field(default=True, alias="validate")
+    persist: bool = True
+
+
 def ffmpeg_available() -> bool:
     return bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 
 
+def _decode_cookie_input(text: str | None, b64: str | None) -> bytes:
+    if b64:
+        try:
+            return base64.b64decode(b64, validate=True)
+        except binascii.Error as exc:
+            raise ValueError("Invalid base64 cookie value.") from exc
+    if text:
+        return text.encode("utf-8")
+    raise ValueError("No cookie content provided.")
+
+
+def _validate_netscape_header(raw: bytes) -> None:
+    head = raw[:200].lstrip()
+    if not (
+        head.startswith(b"# Netscape HTTP Cookie File")
+        or head.startswith(b"# HTTP Cookie File")
+        or b"\t" in raw[:4096]
+    ):
+        raise ValueError("Content does not look like a Netscape cookies.txt file.")
+
+
+def _write_cookies(raw: bytes) -> Path:
+    DOWNLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+    tmp = COOKIES_FILE.with_suffix(".txt.tmp")
+    tmp.write_bytes(raw)
+    try:
+        tmp.chmod(0o600)
+    except OSError:
+        pass
+    tmp.replace(COOKIES_FILE)  # atomic swap; readers never see a half-written file
+    try:
+        COOKIES_FILE.chmod(0o600)
+    except OSError:
+        pass
+    return COOKIES_FILE
+
+
+def set_runtime_cookies(text: str | None = None, b64: str | None = None) -> Path:
+    raw = _decode_cookie_input(text, b64)
+    _validate_netscape_header(raw)  # reject garbage before clobbering the live file
+    with _COOKIE_LOCK:
+        global _RUNTIME_COOKIE_PATH
+        _RUNTIME_COOKIE_PATH = _write_cookies(raw)
+    return _RUNTIME_COOKIE_PATH
+
+
 def cookies_file() -> Path | None:
+    # Priority: admin/KV runtime state -> explicit path -> boot-time env (materialized once).
+    if _RUNTIME_COOKIE_PATH and _RUNTIME_COOKIE_PATH.exists():
+        return _RUNTIME_COOKIE_PATH
+
     if YTDLP_COOKIES_PATH:
         path = Path(YTDLP_COOKIES_PATH)
         return path if path.exists() else None
@@ -78,26 +157,15 @@ def cookies_file() -> Path | None:
     if not YTDLP_COOKIES_BASE64 and not YTDLP_COOKIES_TEXT:
         return None
 
-    DOWNLOAD_ROOT.mkdir(parents=True, exist_ok=True)
-    target = DOWNLOAD_ROOT / "cookies.txt"
-    if target.exists():
-        return target
+    if COOKIES_FILE.exists():
+        return COOKIES_FILE
 
     try:
-        cookie_bytes = (
-            base64.b64decode(YTDLP_COOKIES_BASE64, validate=True)
-            if YTDLP_COOKIES_BASE64
-            else YTDLP_COOKIES_TEXT.encode("utf-8")
-        )
-    except (binascii.Error, UnicodeEncodeError) as exc:
+        cookie_bytes = _decode_cookie_input(YTDLP_COOKIES_TEXT, YTDLP_COOKIES_BASE64)
+    except (ValueError, UnicodeEncodeError) as exc:
         raise RuntimeError("Invalid YTDLP_COOKIES_BASE64 or YTDLP_COOKIES_TEXT value.") from exc
 
-    target.write_bytes(cookie_bytes)
-    try:
-        target.chmod(0o600)
-    except OSError:
-        pass
-    return target
+    return _write_cookies(cookie_bytes)
 
 
 def cookies_available() -> bool:
@@ -105,6 +173,16 @@ def cookies_available() -> bool:
         return cookies_file() is not None
     except RuntimeError:
         return False
+
+
+def _cookie_source() -> str | None:
+    if _RUNTIME_COOKIE_PATH and _RUNTIME_COOKIE_PATH.exists():
+        return "runtime"
+    if YTDLP_COOKIES_PATH and Path(YTDLP_COOKIES_PATH).exists():
+        return "path"
+    if YTDLP_COOKIES_BASE64 or YTDLP_COOKIES_TEXT:
+        return "env"
+    return None
 
 
 def validate_youtube_url(url: str) -> str:
@@ -118,6 +196,51 @@ def validate_youtube_url(url: str) -> str:
 def require_access_token(token: str | None) -> None:
     if APP_ACCESS_TOKEN and token != APP_ACCESS_TOKEN:
         raise HTTPException(status_code=401, detail="Access token required.")
+
+
+def require_admin(token: str | None) -> None:
+    # Stricter than require_access_token: admin write endpoints must never be open.
+    if not APP_ACCESS_TOKEN:
+        raise HTTPException(status_code=403, detail="Admin disabled: set APP_ACCESS_TOKEN.")
+    if token != APP_ACCESS_TOKEN:
+        raise HTTPException(status_code=401, detail="Access token required.")
+
+
+def upstash_configured() -> bool:
+    return bool(UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN)
+
+
+def _upstash(*command: str) -> Any:
+    if not upstash_configured():
+        raise RuntimeError("Upstash is not configured.")
+    request = UrlRequest(
+        UPSTASH_REDIS_REST_URL.rstrip("/"),
+        data=json.dumps(list(command)).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {UPSTASH_REDIS_REST_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=15) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if isinstance(payload, dict) and payload.get("error"):
+        raise RuntimeError(str(payload["error"]))
+    return payload.get("result") if isinstance(payload, dict) else None
+
+
+def persist_cookies(b64: str) -> None:
+    _upstash("SET", COOKIE_KV_KEY, b64)
+
+
+def restore_cookies_from_kv() -> bool:
+    if not upstash_configured():
+        return False
+    stored = _upstash("GET", COOKIE_KV_KEY)
+    if not stored:
+        return False
+    set_runtime_cookies(b64=stored)
+    return True
 
 
 def duration_text(seconds: Any) -> str:
@@ -146,6 +269,11 @@ def base_ydl_options() -> dict[str, Any]:
     cookie_path = cookies_file()
     if cookie_path:
         options["cookiefile"] = str(cookie_path)
+    if YTDLP_PROXY:
+        options["proxy"] = YTDLP_PROXY
+    if YTDLP_PLAYER_CLIENT:
+        clients = [c.strip() for c in YTDLP_PLAYER_CLIENT.split(",") if c.strip()]
+        options["extractor_args"] = {"youtube": {"player_client": clients}}
     return options
 
 
@@ -237,9 +365,47 @@ def download_audio(url: str, audio_format: str) -> Path:
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
+def _looks_like_bot_block(message: str) -> bool:
+    lowered = message.lower()
+    return any(
+        marker in lowered
+        for marker in ("sign in to confirm", "not a bot", "cookies", "login required")
+    )
+
+
+def validate_cookies() -> dict[str, Any]:
+    # Lightweight probe: does a metadata-only extract on a known video succeed?
+    if not cookies_available():
+        result = {"ok": False, "reason": "no_cookies", "message": "尚未設定 cookies。"}
+    else:
+        options = {**base_ydl_options(), "skip_download": True}
+        try:
+            with YoutubeDL(options) as ydl:
+                ydl.extract_info(ADMIN_COOKIE_PROBE_URL, download=False)
+            result = {"ok": True, "reason": "ok", "message": "Cookies 有效。"}
+        except DownloadError as exc:
+            detail = str(exc)[:300]
+            if _looks_like_bot_block(detail):
+                result = {"ok": False, "reason": "expired", "message": "Cookies 已失效或被擋，請重新匯出上傳。"}
+            else:
+                result = {"ok": False, "reason": "error", "message": detail}
+        except Exception as exc:  # noqa: BLE001 - report any probe failure to admin
+            result = {"ok": False, "reason": "error", "message": str(exc)[:300]}
+    result["checkedAt"] = int(time.time())
+    _LAST_VALIDATION.clear()
+    _LAST_VALIDATION.update(result)
+    return result
+
+
 @app.on_event("startup")
 def startup() -> None:
     DOWNLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+    if upstash_configured():
+        try:
+            if restore_cookies_from_kv():
+                print("[startup] Restored cookies from Upstash.")
+        except Exception as exc:  # noqa: BLE001 - never let restore block boot
+            print(f"[startup] Cookie restore from Upstash failed: {exc}")
 
 
 @app.get("/api/config")
@@ -295,6 +461,64 @@ async def api_download(
         filename=filename,
         background=cleanup,
     )
+
+
+@app.get("/api/admin/cookies/status")
+def api_admin_cookie_status(x_app_token: str | None = Header(default=None)) -> dict[str, Any]:
+    require_admin(x_app_token)
+    source = _cookie_source()
+    path = None
+    try:
+        path = cookies_file()
+    except RuntimeError:
+        pass
+    byte_length = path.stat().st_size if path and path.exists() else 0
+    updated_at = int(path.stat().st_mtime) if path and path.exists() else None
+    return {
+        "loaded": bool(path),
+        "source": source,
+        "byteLength": byte_length,
+        "updatedAt": updated_at,
+        "persistBackend": "upstash" if upstash_configured() else None,
+        "lastValidation": _LAST_VALIDATION or None,
+    }
+
+
+@app.post("/api/admin/cookies")
+async def api_admin_set_cookies(
+    payload: CookieRefreshPayload, x_app_token: str | None = Header(default=None)
+) -> dict[str, Any]:
+    require_admin(x_app_token)
+    try:
+        await asyncio.to_thread(
+            set_runtime_cookies, payload.cookies_text, payload.cookies_base64
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    response: dict[str, Any] = {"saved": True}
+
+    if payload.persist and upstash_configured():
+        try:
+            raw = COOKIES_FILE.read_bytes()
+            b64 = base64.b64encode(raw).decode("ascii")
+            await asyncio.to_thread(persist_cookies, b64)
+            response["persist"] = {"persisted": True, "backend": "upstash"}
+        except Exception as exc:  # noqa: BLE001 - surface persist failure without leaking cookies
+            response["persist"] = {"persisted": False, "error": str(exc)[:200]}
+    elif payload.persist:
+        response["persist"] = {"persisted": False, "error": "Upstash not configured."}
+
+    if payload.run_validation:
+        response["validation"] = await asyncio.to_thread(validate_cookies)
+
+    return response
+
+
+@app.post("/api/admin/cookies/validate")
+async def api_admin_validate_cookies(x_app_token: str | None = Header(default=None)) -> dict[str, Any]:
+    require_admin(x_app_token)
+    return await asyncio.to_thread(validate_cookies)
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

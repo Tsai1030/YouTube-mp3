@@ -18,3 +18,15 @@ services:
         value: 1
       - key: APP_ACCESS_TOKEN
         sync: false
+      # Upstash Redis (REST) — persists cookies across free-tier cold starts.
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      # Optional overrides
+      - key: COOKIE_KV_KEY
+        sync: false
+      - key: ADMIN_COOKIE_PROBE_URL
+        sync: false
+      - key: YTDLP_PROXY
+        sync: false
