@@ -101,9 +101,13 @@ Sign in to confirm you’re not a bot
 
 代表 YouTube 對 Render 的雲端 IP 觸發了 bot 驗證。
 
-**第一招（免 cookies，預設已啟用）**：本專案預設用 `YTDLP_PLAYER_CLIENT=tv_embedded`
-這個 player client，多數情況下不需要 cookies 就能繞過 bot 驗證 —— 你和使用者都不用碰憑證。
-大部分影片這樣就能用了。
+**第一招（免 cookies，Docker 已內建）**：Docker 映像會一起跑一個
+[bgutil PO token provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)
+（Node 服務，容器內 `127.0.0.1:4416`），yt-dlp 會自動跟它拿 YouTube 的 PO token，
+讓 `web` client 從資料中心 IP 也能通過驗證 —— **你和使用者都不用碰任何 cookies**。
+Render 上請把 `YTDLP_PLAYER_CLIENT` 設成 `web,tv_embedded`。
+
+> 本機（住宅 IP）通常用預設 `tv_embedded` 就夠，不需要這個 provider。
 
 **第二招（少數影片仍被擋時）**：才需要提供 cookies。以下兩種方式擇一。
 

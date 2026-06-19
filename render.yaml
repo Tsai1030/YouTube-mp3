@@ -34,3 +34,7 @@ services:
         sync: false
       - key: YTDLP_PROXY
         sync: false
+      # With the bundled PO token provider, the web client authenticates from
+      # datacenter IPs without cookies. tv_embedded kept as a fallback.
+      - key: YTDLP_PLAYER_CLIENT
+        value: web,tv_embedded
