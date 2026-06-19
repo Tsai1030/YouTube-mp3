@@ -463,6 +463,26 @@ def api_diag() -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         ytdlp_version = None
 
+    import subprocess
+
+    try:
+        nv = subprocess.run(
+            ["/usr/local/bin/node", "--version"],
+            capture_output=True, timeout=5, text=True,
+        )
+        node_check = {
+            "returncode": nv.returncode,
+            "stdout": nv.stdout.strip(),
+            "stderr": nv.stderr.strip()[:300],
+        }
+    except Exception as exc:  # noqa: BLE001
+        node_check = {"error": str(exc)[:300]}
+
+    try:
+        pot_log = Path("/tmp/pot-provider.log").read_text("utf-8", "replace")[-1200:]
+    except Exception:  # noqa: BLE001
+        pot_log = None
+
     return {
         "playerClient": YTDLP_PLAYER_CLIENT,
         "ffmpegAvailable": ffmpeg_available(),
@@ -471,6 +491,8 @@ def api_diag() -> dict[str, Any]:
         "potProvider": {"reachable": pot_reachable, "detail": pot_detail},
         "potPluginVersion": plugin_version,
         "ytdlpVersion": ytdlp_version,
+        "nodeCheck": node_check,
+        "potLog": pot_log,
     }
 
 

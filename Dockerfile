@@ -67,4 +67,4 @@ EXPOSE 10000
 
 # Start the POT provider in the background, then the web app. If the provider
 # dies the app still serves (it just loses cookie-free auth and falls back).
-CMD ["sh", "-c", "(cd /opt/bgutil-provider && node build/main.js &) ; exec uvicorn webapp.app:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["sh", "-c", "(cd /opt/bgutil-provider && node build/main.js > /tmp/pot-provider.log 2>&1 &) ; exec uvicorn webapp.app:app --host 0.0.0.0 --port ${PORT:-10000}"]
