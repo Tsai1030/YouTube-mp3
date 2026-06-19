@@ -334,7 +334,24 @@ def download_audio(url: str, audio_format: str) -> Path:
             }
         )
     elif audio_format == "m4a":
-        options["format"] = "bestaudio[ext=m4a]/bestaudio/best"
+        # Prefer a native m4a stream, but it can be PO-token-gated on datacenter
+        # IPs. When ffmpeg is present, download best audio and repackage to m4a
+        # so the result is reliable regardless of which source format is served.
+        if ffmpeg_available():
+            options.update(
+                {
+                    "format": "bestaudio/best",
+                    "postprocessors": [
+                        {
+                            "key": "FFmpegExtractAudio",
+                            "preferredcodec": "m4a",
+                            "preferredquality": "0",
+                        }
+                    ],
+                }
+            )
+        else:
+            options["format"] = "bestaudio[ext=m4a]/bestaudio/best"
     else:
         options["format"] = "bestaudio/best"
 
@@ -497,7 +514,8 @@ def api_diag() -> dict[str, Any]:
 
 
 @app.get("/api/diag/extract")
-def api_diag_extract() -> dict[str, Any]:
+def api_diag_extract(x_app_token: str | None = Header(default=None)) -> dict[str, Any]:
+    require_admin(x_app_token)
     # Verbose extraction on a fixed probe video to debug PO token usage.
     class _Collector:
         def __init__(self) -> None:
@@ -533,7 +551,8 @@ def api_diag_extract() -> dict[str, Any]:
 
 
 @app.get("/api/diag/clients")
-def api_diag_clients() -> dict[str, Any]:
+def api_diag_clients(x_app_token: str | None = Header(default=None)) -> dict[str, Any]:
+    require_admin(x_app_token)
     # Try each candidate player client (with POT) and report which works cookie-free.
     candidates = [
         "web", "mweb", "web_embedded", "web_safari", "web_creator",

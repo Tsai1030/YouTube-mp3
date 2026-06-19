@@ -3,6 +3,10 @@
 .env.*
 secrets/
 
+# Cookies (secret — never commit)
+cookies.txt
+*cookies*.txt
+
 # Python
 __pycache__/
 *.py[cod]
